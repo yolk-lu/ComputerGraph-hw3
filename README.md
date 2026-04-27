@@ -1,138 +1,190 @@
+# DIY-DLSS: Real-Time AI Super Resolution for 3D Scenes
 
-# CG HW3 
+A custom implementation of DLSS (Deep Learning Super Sampling) that trains an ESPCN neural network on natively-rendered low/high-resolution frame pairs from a headless ModernGL renderer, then applies learned upscaling at inference time.
+
+## Architecture Overview
+
+```mermaid
+graph TD
+    A[GLB Model Upload] --> B[Trimesh Scene Graph Parser]
+    B --> C[ModernGL VBO/VAO + Textures]
+
+    subgraph Training Pipeline
+        D[Camera Trajectory Recording] --> E[Render LR Natively 256×256]
+        D --> F[Render HR Natively 512×512]
+        E --> G[ESPCN Train Step]
+        F --> G
+        G --> H[espcn_weights.pth]
+    end
+
+    subgraph Inference Pipeline
+        I[Single Camera Snapshot] --> J[Render LR 256×256]
+        J --> K1[Bilinear Upscale]
+        J --> K2[ESPCN Upscale]
+        H --> K2
+        K1 --> L1[DLSS OFF Output]
+        K2 --> L2[DLSS ON Output]
+    end
+
+    C --> E
+    C --> F
+    C --> J
+```
 
 ## Project Structure
 
 ```
-CG_HW3/
-├── app.py                          # Application entry point (Gradio Web Server)
+├── app.py                          # Gradio web app, JS↔Python bridge
+├── metrics.py                      # PSNR / SSIM evaluation utilities
 ├── pipeline/
-│   ├── camera/Camera.py            # Camera utility (State parser for Three.js)
-│   ├── scene/Scene.py              # Scene management (Models, lights, camera)
-│   ├── renderer/Renderer.py        # Controller for ModernGL FBO & ControlNet logic
-│   ├── shader/shader.py            # GLSL Vertex & Fragment shader configurations
-│   ├── model/
-│   │   ├── model.py                # Mesh Loader + Stable Diffusion/ControlNet engine
-│   │   └── dlss_model.py           # PyTorch ESPCN (AI Upscaler) engine
-│   └── utils/utils.py              # Utilities (File parsing, caching)
-├── web_viewer/web/
-│   ├── three_script.js             # Three.js mechanics (rendering, depth extraction)
-│   ├── three_viewer.html           # HTML container for 3D viewer
-│   ├── three_style.css             # CSS for three_viewer
-│   └── style.css                   # Custom CSS styling for Gradio UI
-├── input_model/                    # Temporary cache for user uploaded .obj files
-├── .cache/                         # Local cache for downloaded Hugging Face models
-└── environment.yml                 # Conda environment specifications
+│   ├── camera/Camera.py            # View & projection matrix generation
+│   ├── model/dlss_model.py         # ESPCN model, AIUpscaler wrapper
+│   ├── renderer/Renderer.py        # Headless ModernGL render engine
+│   ├── shader/shader.py            # GLSL vertex & fragment shaders
+│   ├── scene/Scene.py              # Scene state container
+│   └── utils/utils.py              # File I/O helpers
+└── web_viewer/web/
+    ├── three_viewer.html           # Three.js viewer (iframe)
+    ├── three_script.js             # OrbitControls, camera relay, trajectory recording
+    └── style.css / three_style.css
 ```
 
----
+## Key Components
 
-## 快速啟動 (Quick Start)
+### 1. Renderer (`pipeline/renderer/Renderer.py`)
+
+Headless OpenGL renderer using **ModernGL standalone context**. All GPU work runs on a dedicated worker thread via `queue.Queue` to avoid OpenGL context threading issues.
+
+| Method | Description |
+|---|---|
+| `init_gl()` | Creates standalone ModernGL context, compiles shaders, allocates FBO |
+| `_prepare_scene(path)` | Loads `.glb` via Trimesh, flattens scene graph with `dump()`, creates per-material VBO/VAO batches with texture binding |
+| `_render_scene_to_fbo(cam)` | Renders all batches to FBO, reads back color (uint8→float32) and linearized depth |
+| `_render_dlss_comparison(cam_info)` | Produces Bilinear vs ESPCN upscaled comparison from a single LR render |
+| `_train_dlss(trajectory, ...)` | Renders **both LR and HR natively** per camera pose, feeds paired data to ESPCN training |
+
+**Scene Graph Handling**: Uses `trimesh.Scene.dump()` instead of `geometry.values()` to correctly apply hierarchical node transforms from GLB files.
+
+**Multi-Batch Rendering**: Each material/texture gets its own VBO + VAO. During rendering, textures are bound per-batch with `u_use_texture` uniform toggling.
+
+### 2. Camera (`pipeline/camera/Camera.py`)
+
+Synchronizes Python-side rendering with the Three.js frontend camera.
+
+| Method | Description |
+|---|---|
+| `Camera.from_threejs(dict)` | Factory: parses `{position, rotation, target, fov, near, far, mode}` from frontend |
+| `get_view_matrix()` | Computes 4×4 lookAt matrix. Uses `target` for third-person (OrbitControls), Euler angles for first-person |
+| `get_projection_matrix()` | Standard perspective projection from FOV, aspect, near/far |
+
+### 3. ESPCN Model (`pipeline/model/dlss_model.py`)
+
+**Efficient Sub-Pixel Convolutional Neural Network** (Shi et al., 2016) adapted for depth-guided super resolution.
+
+```
+Input: (B, 4, H, W)  ← RGB + Depth
+  ↓ Conv2d(4 → 64, k=5)  + ReLU
+  ↓ Conv2d(64 → 32, k=3) + ReLU
+  ↓ Conv2d(32 → 3·s², k=3)
+  ↓ PixelShuffle(s)
+Output: (B, 3, H·s, W·s)  ← Upscaled RGB
+```
+
+| Class / Method | Description |
+|---|---|
+| `ESPCN(scale_factor, in_channels=4)` | PyTorch model with sub-pixel convolution |
+| `AIUpscaler.load_weights(path)` | Auto-detects scale factor from checkpoint tensor shapes; rebuilds model if scale mismatch |
+| `AIUpscaler.train_step(hr, hr_d, ..., lr_colors, lr_depths)` | Trains on **natively-rendered** LR/HR pairs (eliminates bicubic domain gap). Loss = MSE + (1 − SSIM) |
+| `AIUpscaler.upscale(color, depth)` | Inference: concatenates RGB+depth, runs ESPCN, returns float32 numpy |
+| `AIUpscaler.upscale_bilinear(color)` | Baseline: PIL bilinear resize |
+
+**Auto Scale Detection**: `load_weights()` inspects `net.4.weight.shape[0]` to infer `scale = sqrt(out_channels / 3)`. If the loaded scale differs from the current model, it rebuilds the ESPCN architecture before loading weights.
+
+### 4. Shaders (`pipeline/shader/shader.py`)
+
+| Shader | Details |
+|---|---|
+| **Vertex** | Transforms vertices by `u_model × u_view × u_proj`, passes world position, normal, UV |
+| **Fragment** | Blinn-Phong with **directional sunlight** `(0.5, 1.0, 0.3)`. Ambient=0.5, Diffuse=0.6, Specular=0.1. Texture sampled via `u_use_texture` toggle |
+
+### 5. Metrics (`metrics.py`)
+
+| Function | Description |
+|---|---|
+| `psnr(img1, img2)` | Peak Signal-to-Noise Ratio (dB) |
+| `ssim(img1, img2)` | Structural Similarity Index (uses scikit-image if available) |
+| `compute_metrics(upscaled, gt)` | Returns `{"psnr": float, "ssim": float}` |
+| `save_comparison(lr, espcn, bilinear, gt)` | Generates 2×2 comparison grid PIL image with metric overlays |
+
+## Training Pipeline (Detail)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant JS as Three.js Viewer
+    participant Gradio as app.py
+    participant R as Renderer
+    participant M as AIUpscaler
+
+    User->>JS: Start Recording (orbit camera)
+    JS->>JS: Record camera poses at 4 FPS
+    User->>JS: Stop Recording
+    JS->>Gradio: trajectory_result (N camera dicts)
+    Gradio->>R: train_dlss(trajectory, epochs, lr, scale)
+
+    loop For each camera pose
+        R->>R: render LR (256×256) natively
+        R->>R: render HR (256·s × 256·s) natively
+    end
+
+    R->>M: train_step(hr_batch, hr_depth_batch, lr_colors, lr_depths)
+    M->>M: Concat LR RGB+Depth → (N,4,H,W)
+    M->>M: ESPCN forward → (N,3,H·s,W·s)
+    M->>M: Loss = MSE(pred, HR) + (1 - SSIM(pred, HR))
+    M->>M: Adam optimizer, backprop
+    M->>M: Save espcn_weights.pth
+    M-->>Gradio: Training logs
+```
+
+## Inference Pipeline (Detail)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant JS as Three.js Viewer
+    participant Gradio as app.py
+    participant R as Renderer
+    participant M as AIUpscaler
+
+    User->>JS: Click Render
+    JS->>Gradio: camera_result (single pose)
+    Gradio->>R: render_dlss_comparison(camera_info)
+    R->>R: Render LR color + depth (256×256)
+    R->>M: load_weights(espcn_weights.pth)
+    Note over M: Auto-detect scale from checkpoint
+    R->>M: upscale_bilinear(color_lr) → DLSS OFF
+    R->>M: upscale(color_lr, depth_lr) → DLSS ON
+    M-->>Gradio: (bilinear_pil, espcn_pil, status)
+```
+
+## Setup
 
 ```bash
-# 1. 建立環境
 conda env create -f environment.yml
-conda install nvidia::cuda-toolkit==11.8.0
 conda activate cg_hw3
-
-# 2. 啟動
 python app.py
 ```
 
-開啟 `http://127.0.0.1:7860` 即可使用。
+The app launches at `http://127.0.0.1:8000` with a Gradio share link.
 
----
+## Key Design Decisions
 
-## Rendering Pipeline
+1. **Native LR/HR Training Pairs**: Both LR and HR frames are rendered by the GPU at their respective resolutions, eliminating the domain gap that occurs when LR is created by mathematically downsampling HR (bicubic).
 
+2. **Depth-Guided Upscaling**: The ESPCN takes 4-channel input (RGB + linearized depth), giving the network geometric context to better reconstruct edges and surfaces.
 
+3. **Dedicated GL Thread**: All ModernGL calls execute on a single worker thread. The main Gradio thread communicates via `queue.Queue`, preventing OpenGL context conflicts.
 
+4. **Auto Scale Detection**: Weights trained at any scale (2×, 3×, 4×) can be loaded without manual configuration. The `load_weights()` method inspects the PixelShuffle layer's output channel count to infer the correct scale factor.
 
-```mermaid
-graph TD
-    A[Three.js 取得網頁視角] --> B(擷取 MeshDepthMaterial)
-    A --> C(擷取 Camera 資訊)
-    
-    B -->|回傳 Base64 png| D[app.py Gradio 介面]
-    C -->|回傳 Camera JSON| D
-    
-    D --> E(Renderer_engine.render_pipeline)
-    
-    %% DLSS 軌道
-    E --> F[計算 MVP 矩陣]
-    F -->|載入 VBO/VAO| G[ModernGL Headless 渲染]
-    G -->|256x256 FBO| H[Raw Color Array]
-    G -->|256x256 FBO| I[Float32 Depth Array]
-    H --> J(PyTorch ESPCN 超解析度模型)
-    I --> J
-    J --> K[DLSS Output: 512x512 高畫質圖]
-    
-    %% ControlNet 軌道
-    E --> L[Base64 解碼與反相]
-    L -->|Resize 512x512| M(ControlNet + SD1.5)
-    M --> N[ControlNet Result: AI 風格化圖片]
-### Implementation Phase Research: Rendering Architecture Choices
-
-Before deciding on the Dual Rendering Pipeline, two methods for obtaining the Depth Map were explored:
-
-#### Pathway 1: Backend-Only Rendering (ModernGL outputs Color + Depth) (**Adopted for DLSS Track**)
-This is the standard DLSS approach. The frontend only provides Camera Information, and both Color and Depth are handled entirely by the backend OpenGL engine.
-```mermaid
-graph TD
-    A[Three.js Viewport] --> B{Serialize Camera JSON}
-    B -->|position, fov, target| C(Renderer.py)
-    C -->|Calculate MVP Matrix| D[ModernGL Pipeline]
-    D -->|Render Scene| E[Low-Res FBO]
-    E --> F[Low-Res Color Array]
-    E --> G[High-Precision Depth Array]
-    F --> H(PyTorch ESPCN Model)
-    G --> H
-    H --> I[High-Res PIL Image]
-    I --> J[Gradio UI Display]
-```
-
-#### Pathway 2: Hybrid Rendering (Three.js Depth + ControlNet) (**Adopted for ControlNet Track**)
-Utilizes the depth map captured directly from the Three.js Canvas as the base for the Diffusion model.
-```mermaid
-graph TD
-    A[Three.js Viewport] --> B(Extract MeshDepthMaterial)
-    A --> C(Extract Camera Info)
-    B -->|Return Base64 png| D(Renderer.py Depth Parsing)
-    C -->|Return Camera JSON| E(Renderer.py)
-    E -->|Calculate MVP Matrix| F[ControlNet Pipeline]
-    F -->|Render Scene| G[Low-Res FBO]
-    G --> H[Low-Res Color Array]
-    H --> I(Stable Diffusion)
-    D -->|8-bit Depth Array| I
-    I --> J[High-Res PIL Image]
-    J --> K[Gradio UI Display]
-```
-
-### Scene (pipeline/scene/Scene.py)
-- 管理 3D 場景中的模型、光源、相機
-- `set_camera(camera)` 儲存當前相機視角
-- `add_model(model)` 加入 3D 模型
-
-### Renderer (pipeline/renderer/Renderer.py)
-- 流程控制中樞
-- `prepare_scene()` 載入模型至場景
-- `render_diffuse_image()` 接收深度圖 + Prompt + 相機 → 呼叫 ControlNet 產生風格化圖
-
-### Model (pipeline/model/model.py)
-- `MeshModel` — OBJ 檔案載入 (頂點、面)
-- `Model` — ControlNet + SD 1.5 推論引擎，lazy loading
-
-### Utils (pipeline/utils/utils.py)
-- `load_obj()` 解析 OBJ 格式
-- `save_uploaded_model()` 儲存上傳檔案至 input_model/
-
----
-
-## 3D Viewer 
-
-- **OBJ + MTL + 貼圖支援**：上傳時自動偵測，貼圖轉 Base64 內嵌（繞過 Gradio 檔案伺服限制）   ## 修正：上傳檔案類型統一為 glb 
-- **第一人稱 (WASD)**：Pointer Lock 控制，自由走動
-- **第三人稱 (滑鼠)**：Orbit Controls，旋轉/平移/縮放
-- **即時深度圖擷取**：MeshDepthMaterial 算繪，canvas 截圖
-
-
+5. **Scene Graph Flattening**: GLB models with hierarchical transforms are flattened via `trimesh.Scene.dump()`, which bakes world-space transforms into vertex positions, ensuring correct spatial layout in the headless renderer.
