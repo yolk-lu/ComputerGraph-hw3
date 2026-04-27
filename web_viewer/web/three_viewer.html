@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Three.js Viewer</title>
+    <!-- Gradio /file= router to inject the absolute path during render process -->
+    <style>
+        /* INLINE_CSS_PLACEHOLDER */
+    </style>
+    <!-- Import Map for Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div id="instructions">
+        <h2 style="font-size: 36px">第一人稱模式 (First Person)</h2>
+        <p>點擊此處 (滑鼠視角 / WASD 移動)</p>
+        <p>如需解除鎖定，請按 <span style="font-weight:bold; color:#8b5cf6">ESC 鍵</span></p>
+    </div>
+    <div class="hud" id="hud">目前模式: 載入中...</div>
+    <div id="canvas-container"></div>
+
+    <script>
+        // 這些變數會在 app.py ，使用replace換掉
+        window.GLB_DATA = [[GLB_DATA_PLACEHOLDER]];
+        window.CAMERA_MODE_DATA = "[[CAMERA_MODE_PLACEHOLDER]]";
+    </script>
+    <script type="module">
+        /* INLINE_JS_PLACEHOLDER */
+    </script>
+</body>
+
+</html>

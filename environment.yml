@@ -1,0 +1,21 @@
+name: cg_hw3
+channels:
+  - nvidia
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy
+  - pillow
+  - pip:
+      - trimesh
+      - gradio
+      - huggingface_hub
+      - diffusers
+      - transformers
+      - accelerate
+      - opencv-python
+      - matplotlib
+      - torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118

@@ -1,0 +1,14 @@
+*.png
+*.jpg
+*.jpeg
+
+# input_model and test scripts
+input_model/
+
+scratch_test_trimesh.py
+
+# python cache
+__pycache__/
+
+# model weights
+espcn_weights.pth
