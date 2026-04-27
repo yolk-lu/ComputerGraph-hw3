@@ -12,7 +12,8 @@ class Scene:
     def remove_model(self, model):
         if model in self.models:
             self.models.remove(model)
-
+    def set_camera(self, camera):
+        self.camera = camera
 
     def clear(self):   
         self.models.clear()

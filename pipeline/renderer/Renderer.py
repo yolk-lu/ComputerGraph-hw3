@@ -33,7 +33,7 @@ class Renderer:
         self.color_tex = None
         self.depth_tex = None
 
-        self.display_res = 512
+        self.display_res = 1024
         self.scale_factor = 2
         self.render_res = self.display_res // self.scale_factor
         self.obj_num_verts = 0
