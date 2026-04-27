@@ -16,3 +16,5 @@ espcn_weights.pth
 
 # gradio encrypt key
 .gradio/
+
+DEVELOP.md

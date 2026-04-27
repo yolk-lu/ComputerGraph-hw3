@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import gc
+from tqdm import tqdm
 
 try:
     import torch
@@ -160,7 +161,10 @@ if HAS_TORCH:
             dataset_size = n
             logs = []
             
-            for epoch in range(epochs):
+
+            pbar = tqdm(range(epochs), desc="Training DLSS", unit="epoch")
+            
+            for epoch in pbar:
                 epoch_loss = 0.0
                 epoch_mse = 0.0
                 epoch_ssim = 0.0
@@ -199,10 +203,11 @@ if HAS_TORCH:
                 epoch_mse /= dataset_size
                 epoch_ssim /= dataset_size
                 
+                pbar.set_postfix({'Loss': f"{epoch_loss:.4f}", 'MSE': f"{epoch_mse:.4f}", 'SSIM': f"{epoch_ssim:.4f}"})
+                
                 if (epoch + 1) % max(1, epochs // 10) == 0 or epoch == epochs - 1:
                     log_msg = f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss:.4f} (MSE: {epoch_mse:.4f}, SSIM: {epoch_ssim:.4f})"
                     logs.append(log_msg)
-                    print(log_msg)
             
             # Save weights
             save_path = os.path.join(os.path.dirname(__file__), "espcn_weights.pth")
