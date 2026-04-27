@@ -6,9 +6,10 @@ import numpy as np
 import os
 # PyOpenGL/ModernGL
 import moderngl
+import trimesh
 
 from pipeline.scene.Scene import Scene
-from pipeline.model.model import Model, MeshModel
+from pipeline.model.model import Model
 from pipeline.camera.Camera import Camera
 from pipeline.model.dlss_model import AIUpscaler
 

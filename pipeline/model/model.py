@@ -5,18 +5,6 @@ from pipeline.utils.utils import utils
 from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
 
 
-#TODO:還在想怎麼做
-class MeshModel:
-    """3D model loader """
-    def __init__(self, file_path):
-        self.file_path = file_path
-        self.vertices = []
-        self.faces = []
-
-    def load_object(self):
-        self.vertices, self.faces = utils.load_glb(self.file_path)
-
-
 
 class Model:
     """load model"""
