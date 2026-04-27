@@ -12,3 +12,6 @@ __pycache__/
 
 # model weights
 espcn_weights.pth
+
+# gradio encrypt key
+.gradio/
