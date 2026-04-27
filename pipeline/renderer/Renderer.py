@@ -9,7 +9,7 @@ import moderngl
 import trimesh
 
 from pipeline.scene.Scene import Scene
-from pipeline.model.model import Model
+from pipeline.model.diffusion_model import Diffusion_Model
 from pipeline.camera.Camera import Camera
 from pipeline.model.dlss_model import AIUpscaler
 

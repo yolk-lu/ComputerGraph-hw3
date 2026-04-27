@@ -6,7 +6,7 @@ from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
 
 
 
-class Model:
+class Diffusion_Model:
     """load model"""
     def __init__(self):
         self.pipe = None
