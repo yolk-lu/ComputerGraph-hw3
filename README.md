@@ -177,14 +177,4 @@ python app.py
 
 The app launches at `http://127.0.0.1:8000` with a Gradio share link.
 
-## Key Design Decisions
 
-1. **Native LR/HR Training Pairs**: Both LR and HR frames are rendered by the GPU at their respective resolutions, eliminating the domain gap that occurs when LR is created by mathematically downsampling HR (bicubic).
-
-2. **Depth-Guided Upscaling**: The ESPCN takes 4-channel input (RGB + linearized depth), giving the network geometric context to better reconstruct edges and surfaces.
-
-3. **Dedicated GL Thread**: All ModernGL calls execute on a single worker thread. The main Gradio thread communicates via `queue.Queue`, preventing OpenGL context conflicts.
-
-4. **Auto Scale Detection**: Weights trained at any scale (2×, 3×, 4×) can be loaded without manual configuration. The `load_weights()` method inspects the PixelShuffle layer's output channel count to infer the correct scale factor.
-
-5. **Scene Graph Flattening**: GLB models with hierarchical transforms are flattened via `trimesh.Scene.dump()`, which bakes world-space transforms into vertex positions, ensuring correct spatial layout in the headless renderer.
