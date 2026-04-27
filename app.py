@@ -1,11 +1,7 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
 import base64
-import urllib.parse
 from io import BytesIO
-import PIL.Image
-import PIL.ImageOps
 import html
 import json
 
@@ -20,8 +16,7 @@ PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(PROJECT_ROOT)
 
 # pipeline 
-from pipeline.scene.Scene import Scene
-from pipeline.model.model import Model
+
 from pipeline.renderer.Renderer import Renderer
 from pipeline.utils.utils import utils
 
@@ -43,11 +38,10 @@ def run_controlnet_from_base64(b64_depth, prompt, camera_json):
     if renderer_engine is None:
         return None, None, "Renderer is not imported correctly."
     try:
-        import json
         camera_info = json.loads(camera_json) if camera_json else None
         
         # We will split this inside Renderer.py into DLSS and ControlNet
-        dlss_img, controlnet_img = renderer_engine.render_pipeline(b64_depth, prompt, camera_info)
+        dlss_img, controlnet_img = renderer_engine.render_with_controlnet(b64_depth, prompt, camera_info)
         
         return dlss_img, controlnet_img, "Render complete!"
     except Exception as e:
@@ -61,7 +55,7 @@ def render_scene(model_file_paths):
     """
 
     if not model_file_paths:
-        return "請先上傳 3D 模型", None
+        return "upload .glb file first", None
     
     # handle single or multiple file uploads
     if not isinstance(model_file_paths, list):
@@ -83,13 +77,13 @@ def render_scene(model_file_paths):
     # find the GLB file
     glb_path = uploaded_files.get('.glb')
     if not glb_path:
-        return "請上傳 .glb 檔案", None
+        return "upload .glb file", None
     
     # save GLB to input_model folder
     target_path = os.path.abspath(utils.save_uploaded_model(glb_path))
     
     model_count = renderer_engine.prepare_scene(target_path)
-    scene_info = f"場景目前模型數: {model_count or 0}。"
+    scene_info = f"scene model numbers: {model_count or 0}。"
     mode = "free_cam"
     
     # Pass GLB as Base64 to a hidden textbox to avoid OOM in srcdoc and 404 in Gradio file server
@@ -98,7 +92,7 @@ def render_scene(model_file_paths):
             glb_b64 = base64.b64encode(f.read()).decode('ascii')
             glb_data_b64 = f"data:model/gltf-binary;base64,{glb_b64}"
     except Exception as e:
-        return f"無法讀取 GLB 檔案: {target_path}\\n{str(e)}", None, None
+        return f"can't load GLB file: {target_path}\\n{str(e)}", None, None
         
     
     # frontend resources
@@ -115,7 +109,7 @@ def render_scene(model_file_paths):
         with open(template_path, "r", encoding="utf-8") as f:
             html_str = f.read()
     except Exception as e:
-        return f"無法讀取 three_viewer.html: {str(e)}", None
+        return f"can't read three_viewer.html: {str(e)}", None
 
     # inject configs as JSON (Skip GLB_DATA to avoid srcdoc OOM)
     html_str = html_str.replace("[[GLB_DATA_PLACEHOLDER]]", "null")
@@ -141,15 +135,15 @@ with gr.Blocks(title="CG HW3") as demo:
     
     with gr.Row():
         with gr.Column(scale=1):
-            gr.Markdown("控制面板 (Settings)")
+            gr.Markdown("Control Panel (Settings)")
             
             
-            model_input = gr.File(label="上傳 3D 模型 (.glb)", file_count="multiple")
+            model_input = gr.File(label="upload scene model (.glb)", file_count="multiple")
             
             with gr.Row():
                 render_btn = gr.Button("Generate Scene", elem_classes="primary")
             
-            status_out = gr.Textbox(label="系統輸出狀態", interactive=False)
+            status_out = gr.Textbox(label="System output state", interactive=False)
             
             gr.Markdown("---")
             gr.Markdown("Training Pipeline (DLSS ESPCN)")
@@ -209,8 +203,8 @@ with gr.Blocks(title="CG HW3") as demo:
         js="""
         function(b64) {
             if (!b64 || b64.length < 100) return;
-            console.log('透過 postMessage 傳送 GLB Base64 資料...');
-            // 等待 iframe 載入
+            console.log('postMessage sending GLB Base64...');
+            // wait iframe ready
             setTimeout(() => {
                 const iframes = document.querySelectorAll('iframe');
                 iframes.forEach(iframe => {
@@ -323,7 +317,7 @@ with gr.Blocks(title="CG HW3") as demo:
                         }
                         window.PENDING_ACTION = null;
                     } else if (e.data && e.data.type === 'trajectory_result') {
-                        console.log('收到 trajectory_result', e.data.trajectory.length, 'frames');
+                        console.log('get trajectory_result', e.data.trajectory.length, 'frames');
                         const hiddenTrajDiv = document.getElementById('hidden_trajectory');
                         if (hiddenTrajDiv) {
                             const textarea = hiddenTrajDiv.querySelector('textarea');
@@ -410,10 +404,10 @@ with gr.Blocks(title="CG HW3") as demo:
     )
 
     def trigger_dlss_comparison(camera_json: str):
-        print(f"\nloadRender 請求")
-        print(f"load Camera JSON 長度: {len(camera_json) if camera_json else 0}")
+        print(f"\nloadRender request")
+        print(f"load Camera JSON length: {len(camera_json) if camera_json else 0}")
         if not camera_json:
-            print("沒有收到Three.js傳來的相機資料")
+            print("No camera data from frontend!")
             return None, None, "No camera data from frontend!"
         import json
         info = json.loads(camera_json)

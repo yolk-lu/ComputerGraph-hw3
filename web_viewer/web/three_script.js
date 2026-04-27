@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+// import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // Get placeholders from window object injected by Python/HTML
-const GLB_DATA_URL = window.GLB_DATA;
-let cameraMode = window.CAMERA_MODE_DATA;
+// const GLB_DATA_URL = window.GLB_DATA;
+// let cameraMode = window.CAMERA_MODE_DATA;
 
 const container = document.getElementById('canvas-container');
 const instructions = document.getElementById('instructions');
@@ -13,7 +13,7 @@ const hud = document.getElementById('hud');
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xffffff);
-// 關閉 Fog 讓全域背景乾淨
+
 // scene.fog = new THREE.Fog(0x0f172a, 10, 100);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -162,7 +162,7 @@ window.addEventListener('message', (event) => {
 
     if (event.data && event.data.type === 'request_camera') {
         const cameraInfo = getCameraInfo();
-        console.log('收到 request_camera 指令，準備回傳:', cameraInfo);
+        console.log('get request_camera command, return:', cameraInfo);
         event.source.postMessage({
             type: 'camera_result',
             camera: cameraInfo
@@ -171,7 +171,7 @@ window.addEventListener('message', (event) => {
     else if (event.data && event.data.type === 'load_glb_b64') {
         const dataUrl = event.data.data;
         const gltfLoader = new GLTFLoader();
-        console.log('解析 GLB Base64 資料...');
+        console.log('load glb base64');
 
         // Remove old models to prevent overlap
         loadedModels.forEach(model => scene.remove(model));
@@ -181,13 +181,13 @@ window.addEventListener('message', (event) => {
             const object = gltf.scene;
             scene.add(object);
             loadedModels.push(object);
-            console.log('GLB 模型載入成功');
+            console.log('GLB load success');
             const box = new THREE.Box3().setFromObject(object);
             const center = box.getCenter(new THREE.Vector3());
             const size = box.getSize(new THREE.Vector3());
             const maxDim = Math.max(size.x, size.y, size.z);
 
-            // 動態相機遠近與目標設定
+            // dynamic camera near far
             const fovRad = camera.fov * (Math.PI / 180);
             const distanceY = size.y / (2 * Math.tan(fovRad / 2));
             const distanceX = size.x / (2 * camera.aspect * Math.tan(fovRad / 2));
@@ -231,14 +231,14 @@ window.addEventListener('message', (event) => {
             });
 
         }, undefined, function (error) {
-            console.error('載入 GLB 失敗:', error);
+            console.error('failed load GLB:', error);
         });
     }
     else if (event.data && event.data.type === 'start_record') {
         if (isRecording) return;
         isRecording = true;
         recordedTrajectory = [];
-        console.log('開始錄製軌跡 2fps');
+        console.log('start record (2 fps)');
         recordIntervalId = setInterval(() => {
             recordedTrajectory.push(getCameraInfo());
         }, 500); // 2 frames per second
@@ -247,7 +247,7 @@ window.addEventListener('message', (event) => {
         if (!isRecording) return;
         isRecording = false;
         clearInterval(recordIntervalId);
-        console.log('停止錄製軌跡，共收集:', recordedTrajectory.length, 'frames');
+        console.log('stop record, get:', recordedTrajectory.length, 'frames');
         event.source.postMessage({
             type: 'trajectory_result',
             trajectory: recordedTrajectory
@@ -268,7 +268,7 @@ window.addEventListener('message', (event) => {
 
         const cameraInfo = getCameraInfo();
 
-        console.log('[Camera]', JSON.stringify(cameraInfo));
+        console.log('Camera info:', JSON.stringify(cameraInfo));
         event.source.postMessage({
             type: 'depth_result',
             depth: dataURL,

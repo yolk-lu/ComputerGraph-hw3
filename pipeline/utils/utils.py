@@ -2,35 +2,35 @@
 
 import os 
 import shutil
-
+import trimesh
 class utils:
-    @staticmethod
-    def load_obj(file_path):
-        """載入obj檔案"""
-        vertices = []
-        faces = []
-        if not os.path.exists(file_path):
-            return vertices, faces
+    # @staticmethod
+    # def load_obj(file_path):
+    #     """load obj file"""
+    #     vertices = []
+    #     faces = []
+    #     if not os.path.exists(file_path):
+    #         return vertices, faces
 
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.startswith('v '):
-                    parts = line.split()
-                    vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
-                elif line.startswith('f '):
-                    parts = line.split()
-                    face = []
-                    for p in parts[1:]:
-                        # obj format face indices start from 1
-                        v_idx = int(p.split('/')[0]) - 1
-                        face.append(v_idx)
-                    faces.append(face)
-        return vertices, faces
+    #     with open(file_path, 'r', encoding='utf-8') as f:
+    #         for line in f:
+    #             if line.startswith('v '):
+    #                 parts = line.split()
+    #                 vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
+    #             elif line.startswith('f '):
+    #                 parts = line.split()
+    #                 face = []
+    #                 for p in parts[1:]:
+    #                     # obj format face indices start from 1
+    #                     v_idx = int(p.split('/')[0]) - 1
+    #                     face.append(v_idx)
+    #                 faces.append(face)
+    #     return vertices, faces
 
     
     @staticmethod
     def save_uploaded_model(real_path):
-        """上傳的模型複製到專案內的 input_model 資料夾"""
+        """Save uploaded model to project's input_model folder"""
         
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         input_dir = os.path.join(project_root, "input_model")
@@ -46,7 +46,6 @@ class utils:
 
     @staticmethod
     def load_glb(file_path): 
-        import trimesh
         try:
             # force='mesh' concatenates all meshes in the scene into a single Trimesh object
             mesh = trimesh.load(file_path, force='mesh')
@@ -62,5 +61,5 @@ class utils:
                     return concat_mesh.vertices.tolist(), concat_mesh.faces.tolist()
             return [], []
         except Exception as e:
-            print(f"[Utils] Error loading GLB: {e}")
+            print(f"Utils:Error loading GLB: {e}")
             return [], []

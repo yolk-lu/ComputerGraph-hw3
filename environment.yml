@@ -18,4 +18,8 @@ dependencies:
       - accelerate
       - opencv-python
       - matplotlib
-      - torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+      - moderngl
+      - --extra-index-url https://download.pytorch.org/whl/cu118
+      - torch==2.7.1+cu118
+      - torchvision==0.22.1+cu118
+      - torchaudio==2.7.1+cu118

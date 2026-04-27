@@ -307,7 +307,7 @@ class Renderer:
         return color, linear_depth
 
 
-    def render_pipeline(self, b64_depth: str, prompt: str, camera_info: dict):
+    def render_with_controlnet(self, b64_depth: str, prompt: str, camera_info: dict):
         """
         Executes BOTH the ControlNet pipeline (original Base64 workflow)
         and the DLSS ModernGL rendering flow, returning output for both.
@@ -410,7 +410,7 @@ class Renderer:
         dlss_off_pil = PIL.Image.fromarray((bilinear_np * 255.0).clip(0, 255).astype(np.uint8))
         
         if not has_weights:
-            return dlss_off_pil, None, f"狀態：無 pth file 檔案，目前僅顯示 Bilinear 放大結果。"
+            return dlss_off_pil, None, f"state：no pth file, show Bilinear upscaled result"
              
         # DLSS ON (torch.nn)
         ai_np = self.dlss_upscaler.upscale(color_np, depth_np)
