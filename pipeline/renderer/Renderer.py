@@ -4,7 +4,7 @@ import PIL.Image
 import PIL.ImageOps
 import numpy as np
 import os
-# PyOpenGL/ModernGL
+
 import moderngl
 import trimesh
 
@@ -95,7 +95,7 @@ class Renderer:
         return result
 
     def render_benchmark(self, camera_info: dict):
-        print("排 render_benchmark 到 task_queue...")
+        print(" render_benchmark to task_queue...")
         self.task_queue.put(('render_benchmark', (camera_info,), {}))
         success, result = self.result_queue.get()
         if not success:
@@ -103,7 +103,7 @@ class Renderer:
         return result
 
     def train_dlss(self, camera_info: dict, epochs: int, lr: float, scale: int):
-        print(f"發送 train_dlss 到 task_queue... Epochs: {epochs}")
+        print(f" send train_dlss to task_queue... Epochs: {epochs}")
         self.task_queue.put(('train_dlss', (camera_info, epochs, lr, scale), {}))
         success, result = self.result_queue.get()
         if not success:
@@ -369,8 +369,7 @@ class Renderer:
         
         if self.diffusion_model is None:
             # Lazy load ControlNet (Heavy VRAM operation)
-            from pipeline.model.model import Model
-            self.diffusion_model = Model()
+            self.diffusion_model = Diffusion_Model()
             
         controlnet_pil = self.diffusion_model.generate(depth_pil, prompt)
 

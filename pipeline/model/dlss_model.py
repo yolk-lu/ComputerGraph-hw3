@@ -44,6 +44,7 @@ try:
         
 except ImportError:
     HAS_TORCH = False
+    pass
 
 
 if HAS_TORCH:

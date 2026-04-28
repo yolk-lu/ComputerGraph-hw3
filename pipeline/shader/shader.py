@@ -42,6 +42,7 @@ in vec2 v_uv;
 layout(location = 0) out vec4 frag_color;
 
 void main() {
+    
     vec3 N = normalize(v_normal);
     // Use a fixed directional light (e.g. sunlight) instead of a point light
     vec3 light_dir = normalize(vec3(0.5, 1.0, 0.3));
